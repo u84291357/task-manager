@@ -27,9 +27,11 @@ const el = {
   menuBackupBtn: document.getElementById("menuBackupBtn"),
 
   showListViewBtn: document.getElementById("showListViewBtn"),
+  showBoardViewBtn: document.getElementById("showBoardViewBtn"),
   showCalendarViewBtn: document.getElementById("showCalendarViewBtn"),
   filterPanel: document.getElementById("filterPanel"),
   listViewSection: document.getElementById("listViewSection"),
+  boardViewSection: document.getElementById("boardViewSection"),
   calendarViewSection: document.getElementById("calendarViewSection"),
 
   searchText: document.getElementById("searchText"),
@@ -41,10 +43,15 @@ const el = {
   importBtn: document.getElementById("importBtn"),
   importFile: document.getElementById("importFile"),
   clearCompletedBtn: document.getElementById("clearCompletedBtn"),
+  clearCompletedBtnBoard: document.getElementById("clearCompletedBtnBoard"),
   clearDateFilterBtn: document.getElementById("clearDateFilterBtn"),
+  clearDateFilterBtnBoard: document.getElementById("clearDateFilterBtnBoard"),
 
   summary: document.getElementById("summary"),
+  boardFilter: document.getElementById("boardFilter"),
   taskList: document.getElementById("taskList"),
+
+  board: document.getElementById("board"),
 
   calendarTitle: document.getElementById("calendarTitle"),
   calendarGrid: document.getElementById("calendarGrid"),
@@ -60,7 +67,18 @@ const el = {
   editDue: document.getElementById("editDue"),
   editPriority: document.getElementById("editPriority"),
   editCategory: document.getElementById("editCategory"),
+  editStatus: document.getElementById("editStatus"),
   editMemo: document.getElementById("editMemo"),
+
+  addModal: document.getElementById("addModal"),
+  closeAddModalBtn: document.getElementById("closeAddModalBtn"),
+  cancelAddBtn: document.getElementById("cancelAddBtn"),
+  addModalBtn: document.getElementById("addModalBtn"),
+  addTitle: document.getElementById("addTitle"),
+  addDue: document.getElementById("addDue"),
+  addPriority: document.getElementById("addPriority"),
+  addCategory: document.getElementById("addCategory"),
+  addMemo: document.getElementById("addMemo"),
 
   category: document.getElementById("category"),
   newCategory: document.getElementById("newCategory"),
@@ -68,6 +86,10 @@ const el = {
   categoryFilter: document.getElementById("categoryFilter"),
 };
 
+/**
+ * localStorageからタスク読み込み
+ * @returns
+ */
 function loadTasks() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -75,20 +97,24 @@ function loadTasks() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.map((task)=>({
+    return parsed.map((task) => ({
       ...task,
-      category:normalizeCategory(task.category)
+      category: normalizeCategory(task.category),
     }));
-
   } catch {
     alert("保存データの読み込みに失敗しました。");
     return [];
   }
 }
 
+/**
+ * タスク一覧からカテゴリ一覧を取得
+ * @returns
+ */
 function loadCategories() {
-  const taskCategories = loadTasks()
-    .map((task) => normalizeCategory(task.category));
+  const taskCategories = loadTasks().map((task) =>
+    normalizeCategory(task.category),
+  );
 
   const uniqueCategories = [...new Set(taskCategories)];
 
@@ -105,7 +131,9 @@ function loadCategories() {
 
 function rebuildCategoriesFromTasks() {
   const taskCategories = tasks.map((task) => normalizeCategory(task.category));
-  const merged = [...new Set([DEFAULT_CATEGORY, ...categories, ...taskCategories])];
+  const merged = [
+    ...new Set([DEFAULT_CATEGORY, ...categories, ...taskCategories]),
+  ];
 
   categories = merged.sort((a, b) => {
     if (a === DEFAULT_CATEGORY) return -1;
@@ -114,6 +142,11 @@ function rebuildCategoriesFromTasks() {
   });
 }
 
+/**
+ * カテゴリを正規化
+ * @param {*} category
+ * @returns
+ */
 function normalizeCategory(category) {
   const value = String(category || "").trim();
   return value || DEFAULT_CATEGORY;
@@ -136,19 +169,27 @@ function updateCategorySelectOptions() {
 
   const selectedAddCategory = el.category.value || DEFAULT_CATEGORY;
   const selectedEditCategory = el.editCategory.value || DEFAULT_CATEGORY;
+  const selectedAddModalCategory = el.addCategory.value || DEFAULT_CATEGORY;
   const selectedFilterCategory = el.categoryFilter.value || "all";
 
   const addOptions = categories
-    .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
+    .map(
+      (category) =>
+        `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`,
+    )
     .join("");
 
   const filterOptions = [
     `<option value="all">すべて</option>`,
-    ...categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
+    ...categories.map(
+      (category) =>
+        `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`,
+    ),
   ].join("");
 
   el.category.innerHTML = addOptions;
   el.editCategory.innerHTML = addOptions;
+  el.addCategory.innerHTML = addOptions;
   el.categoryFilter.innerHTML = filterOptions;
 
   if (categories.includes(selectedAddCategory)) {
@@ -163,7 +204,16 @@ function updateCategorySelectOptions() {
     el.editCategory.value = DEFAULT_CATEGORY;
   }
 
-  if (selectedFilterCategory === "all" || categories.includes(selectedFilterCategory)) {
+  if (categories.includes(selectedAddModalCategory)) {
+    el.addCategory.value = selectedAddModalCategory;
+  } else {
+    el.addCategory.value = DEFAULT_CATEGORY;
+  }
+
+  if (
+    selectedFilterCategory === "all" ||
+    categories.includes(selectedFilterCategory)
+  ) {
     el.categoryFilter.value = selectedFilterCategory;
   } else {
     el.categoryFilter.value = "all";
@@ -212,7 +262,9 @@ function getPriorityClass(priority) {
 function createTask(title, dueDate, priority, category, memo) {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`,
+    id: crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random()}`,
     title: title.trim(),
     dueDate: dueDate || "",
     priority,
@@ -220,7 +272,7 @@ function createTask(title, dueDate, priority, category, memo) {
     memo: memo.trim(),
     done: false,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 }
 
@@ -280,29 +332,33 @@ function setMainPage(page) {
       section: el.addTaskSection,
       title: "タスク追加",
       desc: "新しいタスクを登録します。",
-      button: el.menuAddTaskBtn
+      button: el.menuAddTaskBtn,
     },
     tasks: {
       section: el.taskViewSection,
       title: "タスク一覧",
-      desc: "一覧表示とカレンダー表示を切り替えて管理できます。",
-      button: el.menuTaskViewBtn
+      desc: "一覧表示・カレンダー表示・カンバン表示を切り替えて管理できます。",
+      button: el.menuTaskViewBtn,
     },
     backup: {
       section: el.backupSection,
       title: "バックアップ",
       desc: "JSONバックアップの出力と読込を行います。",
-      button: el.menuBackupBtn
-    }
+      button: el.menuBackupBtn,
+    },
   };
 
-  [el.addTaskSection, el.taskViewSection, el.backupSection].forEach((section) => {
-    section.classList.add("hidden-view");
-  });
+  [el.addTaskSection, el.taskViewSection, el.backupSection].forEach(
+    (section) => {
+      section.classList.add("hidden-view");
+    },
+  );
 
-  [el.menuAddTaskBtn, el.menuTaskViewBtn, el.menuBackupBtn].forEach((button) => {
-    button.classList.remove("active");
-  });
+  [el.menuAddTaskBtn, el.menuTaskViewBtn, el.menuBackupBtn].forEach(
+    (button) => {
+      button.classList.remove("active");
+    },
+  );
 
   const current = pages[page];
   current.section.classList.remove("hidden-view");
@@ -313,6 +369,8 @@ function setMainPage(page) {
   if (page === "tasks") {
     if (currentView === "calendar") {
       renderCalendar();
+    } else if (currentView === "board") {
+      renderBoard();
     } else {
       render();
     }
@@ -323,15 +381,28 @@ function setView(view) {
   currentView = view;
   if (view === "list") {
     el.listViewSection.classList.remove("hidden-view");
+    el.boardViewSection.classList.add("hidden-view");
     el.calendarViewSection.classList.add("hidden-view");
     el.filterPanel.classList.remove("hidden-view");
     el.showListViewBtn.classList.remove("secondary");
+    el.showBoardViewBtn.classList.add("secondary");
     el.showCalendarViewBtn.classList.add("secondary");
+  } else if (view === "board") {
+    el.listViewSection.classList.add("hidden-view");
+    el.boardViewSection.classList.remove("hidden-view");
+    el.calendarViewSection.classList.add("hidden-view");
+    el.filterPanel.classList.add("hidden-view");
+    el.showListViewBtn.classList.add("secondary");
+    el.showBoardViewBtn.classList.remove("secondary");
+    el.showCalendarViewBtn.classList.add("secondary");
+    renderBoard();
   } else {
     el.listViewSection.classList.add("hidden-view");
+    el.boardViewSection.classList.add("hidden-view");
     el.calendarViewSection.classList.remove("hidden-view");
     el.filterPanel.classList.add("hidden-view");
     el.showListViewBtn.classList.add("secondary");
+    el.showBoardViewBtn.classList.add("secondary");
     el.showCalendarViewBtn.classList.remove("secondary");
     renderCalendar();
   }
@@ -408,6 +479,7 @@ function openEditModal(id) {
   el.editDue.value = task.dueDate || "";
   el.editPriority.value = task.priority;
   el.editCategory.value = normalizeCategory(task.category);
+  el.editStatus.value = task.done ? "done" : "";
   el.editMemo.value = task.memo || "";
 
   el.editModal.classList.remove("hidden");
@@ -415,10 +487,27 @@ function openEditModal(id) {
   el.editTitle.focus();
 }
 
+function openAddModal(category) {
+  el.addTitle.value = "";
+  el.addDue.value = "";
+  el.addPriority.value = "中";
+  el.addMemo.value = "";
+  el.addCategory.value = normalizeCategory(category);
+
+  el.addModal.classList.remove("hidden");
+  el.addModal.setAttribute("aria-hidden", "false");
+  el.addTitle.focus();
+}
+
 function closeEditModal() {
   editingTaskId = null;
   el.editModal.classList.add("hidden");
   el.editModal.setAttribute("aria-hidden", "true");
+}
+
+function closeAddModal() {
+  el.addModal.classList.add("hidden");
+  el.addModal.setAttribute("aria-hidden", "true");
 }
 
 function saveEdit() {
@@ -431,10 +520,12 @@ function saveEdit() {
     el.editTitle.focus();
     return;
   }
+
   task.title = title;
   task.dueDate = el.editDue.value;
   task.priority = el.editPriority.value;
   task.category = normalizeCategory(el.editCategory.value);
+  task.done = el.editStatus.value === "done" ? true : false;
   task.memo = el.editMemo.value.trim();
   task.updatedAt = new Date().toISOString();
   saveTasks();
@@ -442,15 +533,26 @@ function saveEdit() {
   render();
 }
 
+function addTaskFromModal() {
+  el.title.value = el.addTitle.value;
+  el.due.value = el.addDue.value;
+  el.priority.value = el.addPriority.value;
+  el.category.value = el.addCategory.value;
+  el.memo.valuee = el.addMemo.value;
+  addTask();
+}
+
 function exportJson() {
   const backup = {
     app: "offline-task-manager",
     version: 5,
     exportedAt: new Date().toISOString(),
-    tasks
+    tasks,
   };
 
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -467,26 +569,41 @@ function importJson(file) {
   reader.onload = (event) => {
     try {
       const parsed = JSON.parse(event.target.result);
-      const imported = Array.isArray(parsed) ? parsed : Array.isArray(parsed.tasks) ? parsed.tasks : null;
+      const imported = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed.tasks)
+          ? parsed.tasks
+          : null;
       if (!imported) throw new Error("JSON形式が不正です。");
       const normalized = imported
         .map((task) => ({
-          id: task.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`),
+          id:
+            task.id ||
+            (crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}_${Math.random()}`),
           title: String(task.title || "").trim(),
           dueDate: String(task.dueDate || ""),
-          priority: ["高", "中", "低"].includes(task.priority) ? task.priority : "中",
+          priority: ["高", "中", "低"].includes(task.priority)
+            ? task.priority
+            : "中",
           category: normalizeCategory(task.category),
           memo: String(task.memo || ""),
           done: Boolean(task.done),
           createdAt: task.createdAt || new Date().toISOString(),
-          updatedAt: task.updatedAt || new Date().toISOString()
+          updatedAt: task.updatedAt || new Date().toISOString(),
         }))
         .filter((task) => task.title);
       if (normalized.length === 0) {
         alert("有効なタスクが見つかりませんでした。");
         return;
       }
-      if (!confirm(`現在のタスクを上書きして ${normalized.length} 件を読み込みますか？`)) return;
+      if (
+        !confirm(
+          `現在のタスクを上書きして ${normalized.length} 件を読み込みますか？`,
+        )
+      )
+        return;
       tasks = normalized;
       saveTasks();
       render();
@@ -514,12 +631,27 @@ function getFilteredAndSortedTasks() {
   const categoryFilter = el.categoryFilter.value;
 
   const filtered = tasks.filter((task) => {
-    const matchesKeyword = task.title.toLowerCase().includes(keyword) || task.memo.toLowerCase().includes(keyword);
-    const matchesStatus = status === "all" || (status === "open" && !task.done) || (status === "done" && task.done);
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-    const matchesCategory = categoryFilter === "all" || normalizeCategory(task.category) === categoryFilter;
-    const matchesSelectedDate = !selectedCalendarDate || task.dueDate === selectedCalendarDate;
-    return matchesKeyword && matchesStatus && matchesPriority && matchesCategory && matchesSelectedDate;
+    const matchesKeyword =
+      task.title.toLowerCase().includes(keyword) ||
+      task.memo.toLowerCase().includes(keyword);
+    const matchesStatus =
+      status === "all" ||
+      (status === "open" && !task.done) ||
+      (status === "done" && task.done);
+    const matchesPriority =
+      priorityFilter === "all" || task.priority === priorityFilter;
+    const matchesCategory =
+      categoryFilter === "all" ||
+      normalizeCategory(task.category) === categoryFilter;
+    const matchesSelectedDate =
+      !selectedCalendarDate || task.dueDate === selectedCalendarDate;
+    return (
+      matchesKeyword &&
+      matchesStatus &&
+      matchesPriority &&
+      matchesCategory &&
+      matchesSelectedDate
+    );
   });
 
   filtered.sort((a, b) => {
@@ -561,37 +693,143 @@ function renderCalendar() {
   el.calendarTitle.textContent = `${year}年${month + 1}月`;
   const cells = getMonthMatrix(currentCalendarDate);
 
-  el.calendarGrid.innerHTML = cells.map((date) => {
-    const dateKey = toDateKey(date);
-    const dayTasks = getTasksByDate(dateKey);
-    const isCurrentMonth = date.getMonth() === month;
-    const isToday = dateKey === todayKey;
-    const isSelected = selectedCalendarDate === dateKey;
-    const day = date.getDay();
-    const dateClass = ["calendar-date", day === 0 ? "calendar-date-sunday" : "", day === 6 ? "calendar-date-saturday" : ""].join(" ").trim();
-    const cellClass = ["calendar-cell", !isCurrentMonth ? "other-month" : "", isToday ? "today" : "", isSelected ? "selected-date" : ""].join(" ").trim();
-    const visibleTasks = dayTasks.slice(0, 4);
-    const moreCount = dayTasks.length - visibleTasks.length;
+  el.calendarGrid.innerHTML = cells
+    .map((date) => {
+      const dateKey = toDateKey(date);
+      const dayTasks = getTasksByDate(dateKey);
+      const isCurrentMonth = date.getMonth() === month;
+      const isToday = dateKey === todayKey;
+      const isSelected = selectedCalendarDate === dateKey;
+      const day = date.getDay();
+      const dateClass = [
+        "calendar-date",
+        day === 0 ? "calendar-date-sunday" : "",
+        day === 6 ? "calendar-date-saturday" : "",
+      ]
+        .join(" ")
+        .trim();
+      const cellClass = [
+        "calendar-cell",
+        !isCurrentMonth ? "other-month" : "",
+        isToday ? "today" : "",
+        isSelected ? "selected-date" : "",
+      ]
+        .join(" ")
+        .trim();
+      const visibleTasks = dayTasks.slice(0, 4);
+      const moreCount = dayTasks.length - visibleTasks.length;
 
-    return `
+      return `
       <div class="${cellClass}" onclick="selectCalendarDateFromUI('${dateKey}')">
         <div class="calendar-date-row">
           <div class="${dateClass}">${date.getDate()}</div>
         </div>
         <div class="calendar-task-list">
-          ${visibleTasks.map((task) => `
+          ${visibleTasks
+            .map(
+              (task) => `
             <div class="calendar-task ${getPriorityClass(task.priority)} ${task.done ? "done" : ""} ${isOverdue(task) ? "overdue" : ""}"
                  title="${escapeHtml(task.title)}"
                  onclick="openEditFromCalendarUI(event, '${task.id}')">
                  <div class="calendar-task-category">${escapeHtml(normalizeCategory(task.category))}</div>
                 <div>${escapeHtml(task.title)}</div>
             </div>
-          `).join("")}
+          `,
+            )
+            .join("")}
           ${moreCount > 0 ? `<div class="calendar-more">他 ${moreCount} 件</div>` : ""}
         </div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
+}
+
+function renderBoard() {
+  el.board.innerHTML = "";
+  rebuildCategoriesFromTasks();
+  const filtered = getFilteredAndSortedTasks();
+
+  if (filtered.length === 0) {
+    el.board.innerHTML = `<div class="empty">表示するタスクがありません。</div>`;
+    renderCalendar();
+    return;
+  }
+
+  el.boardFilter.textContent = `${selectedCalendarDate ? `日付: ${selectedCalendarDate}` : ""}`;
+  if (selectedCalendarDate) {
+    el.clearDateFilterBtnBoard.classList.remove("hidden-view");
+  } else {
+    el.clearDateFilterBtnBoard.classList.add("hidden-view");
+  }
+
+  const sortedFilterd = filtered.sort(
+    (a, b) =>
+      a.done - b.done ||
+      a.dueDate.localeCompare(b.dueDate) ||
+      getPriorityOrder(b.priority) - getPriorityOrder(a.priority),
+  );
+
+  const grouped = {};
+  sortedFilterd.forEach((task) => {
+    const category = normalizeCategory(task.category);
+    if (!grouped[category]) {
+      grouped[category] = [];
+    }
+    grouped[category].push(task);
+  });
+
+  categories.forEach((category) => {
+    const column = document.createElement("div");
+    column.className = "board-column";
+
+    const title = document.createElement("div");
+    title.className = "board-column-title";
+    const count = grouped[category] ? grouped[category].length : 0;
+    title.textContent = `${category} (${count})`;
+
+    const taskList = document.createElement("div");
+    taskList.className = "board-task-list";
+
+    if (!grouped[category] || grouped[category].length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "board-empty";
+      empty.textContent = "タスクなし";
+      taskList.appendChild(empty);
+    } else {
+      grouped[category].forEach((task) => {
+        const overdue = isOverdue(task);
+
+        const card = document.createElement("div");
+        card.className = `board-card ${getPriorityClass(task.priority)} ${task.done ? "done" : ""} ${isOverdue(task) ? "overdue" : ""}`;
+        card.onclick = (event) => {
+          openEditFromBoard(event, task.id);
+        };
+
+        card.innerHTML = `
+          <div class="board-card-title">${escapeHtml(task.title || "無題")}</div>
+          <div class="meta-row">
+            <div class="board-card-meta">期限: ${escapeHtml(task.dueDate || "-")}</div>
+            ${overdue ? `<span class="tag overdue-tag">期限切れ</span>` : ""}
+          </div>
+        `;
+
+        taskList.appendChild(card);
+      });
+    }
+
+    const addTaskBtn = document.createElement("button");
+    addTaskBtn.className = "add-button";
+    addTaskBtn.textContent = "＋　タスク追加";
+    addTaskBtn.onclick = (event) => {
+      openAddFromBoard(event, category);
+    };
+
+    column.appendChild(title);
+    column.appendChild(taskList);
+    column.appendChild(addTaskBtn);
+    el.board.appendChild(column);
+  });
 }
 
 function render() {
@@ -615,12 +853,13 @@ function render() {
     return;
   }
 
-  el.taskList.innerHTML = filtered.map((task) => {
-    const priorityClass = getPriorityClass(task.priority);
-    const overdue = isOverdue(task);
-    const doneClass = task.done ? "done-card" : "";
-    const titleClass = task.done ? "task-title done" : "task-title";
-    return `
+  el.taskList.innerHTML = filtered
+    .map((task) => {
+      const priorityClass = getPriorityClass(task.priority);
+      const overdue = isOverdue(task);
+      const doneClass = task.done ? "done-card" : "";
+      const titleClass = task.done ? "task-title done" : "task-title";
+      return `
       <div class="task-card ${priorityClass} ${doneClass} ${overdue ? "overdue" : ""}">
         <div class="task-main-row">
           <div class="task-left">
@@ -644,19 +883,34 @@ function render() {
         </div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 
   renderCalendar();
+  renderBoard();
 }
 
 function handleModalBackdropClick(event) {
   const target = event.target;
-  if (target && target.dataset.close === "true") closeEditModal();
+  if (target && target.dataset.close === "true") {
+    closeEditModal();
+    closeAddModal();
+  }
 }
 
 function openEditFromCalendar(event, id) {
   event.stopPropagation();
   openEditModal(id);
+}
+
+function openEditFromBoard(event, id) {
+  event.stopPropagation();
+  openEditModal(id);
+}
+
+function openAddFromBoard(event, category) {
+  event.stopPropagation();
+  openAddModal(category);
 }
 
 el.addBtn.addEventListener("click", addTask);
@@ -669,6 +923,7 @@ el.menuTaskViewBtn.addEventListener("click", () => setMainPage("tasks"));
 el.menuBackupBtn.addEventListener("click", () => setMainPage("backup"));
 
 el.showListViewBtn.addEventListener("click", () => setView("list"));
+el.showBoardViewBtn.addEventListener("click", () => setView("board"));
 el.showCalendarViewBtn.addEventListener("click", () => setView("calendar"));
 
 el.searchText.addEventListener("input", render);
@@ -692,15 +947,25 @@ el.importFile.addEventListener("change", (event) => {
 });
 
 el.clearCompletedBtn.addEventListener("click", clearCompletedTasks);
+el.clearCompletedBtnBoard.addEventListener("click", clearCompletedTasks);
 el.clearDateFilterBtn.addEventListener("click", clearSelectedCalendarDate);
+el.clearDateFilterBtnBoard.addEventListener("click", clearSelectedCalendarDate);
 
 el.prevMonthBtn.addEventListener("click", () => {
-  currentCalendarDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() - 1, 1);
+  currentCalendarDate = new Date(
+    currentCalendarDate.getFullYear(),
+    currentCalendarDate.getMonth() - 1,
+    1,
+  );
   renderCalendar();
 });
 
 el.nextMonthBtn.addEventListener("click", () => {
-  currentCalendarDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1);
+  currentCalendarDate = new Date(
+    currentCalendarDate.getFullYear(),
+    currentCalendarDate.getMonth() + 1,
+    1,
+  );
   renderCalendar();
 });
 
@@ -714,8 +979,14 @@ el.cancelEditBtn.addEventListener("click", closeEditModal);
 el.saveEditBtn.addEventListener("click", saveEdit);
 el.editModal.addEventListener("click", handleModalBackdropClick);
 
+el.closeAddModalBtn.addEventListener("click", closeAddModal);
+el.cancelAddBtn.addEventListener("click", closeAddModal);
+el.addModalBtn.addEventListener("click", addTaskFromModal);
+el.addModal.addEventListener("click", handleModalBackdropClick);
+
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !el.editModal.classList.contains("hidden")) closeEditModal();
+  if (event.key === "Escape" && !el.editModal.classList.contains("hidden"))
+    closeEditModal();
 });
 
 window.toggleTaskFromUI = toggleTask;
